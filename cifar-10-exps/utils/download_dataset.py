@@ -27,7 +27,7 @@ def download_cifar10_from_hf(save_dir: str) -> str:
     
     # Expand user path and create directory
     save_dir = os.path.expanduser(save_dir)
-    dataset_root = os.path.join(save_dir, "cifar10_hf")
+    dataset_root = os.path.join(save_dir, "Memo")
     os.makedirs(dataset_root, exist_ok=True)
     
     # Check if dataset already exists
@@ -96,13 +96,13 @@ def download_cifar10_from_hf(save_dir: str) -> str:
 def get_default_dataroot() -> str:
     """
     Get the default dataroot path based on server structure.
-    For DGX server: ~/btp/cifar10_hf
+    For DGX server: ~/btp/Memo
     
     Returns:
         str: Default dataroot path
     """
     home = os.path.expanduser("~")
-    return os.path.join(home, "btp", "cifar10_hf")
+    return os.path.join(home, "btp", "Memo")
 
 
 if __name__ == "__main__":

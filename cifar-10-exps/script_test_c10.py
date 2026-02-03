@@ -18,16 +18,16 @@ args = parser.parse_args()
 experiment = args.experiment
 resume = args.resume
 
-# Set dataroot - either use provided path or download to ~/btp
+# Set dataroot - either use provided path or download to ~/btp/Memo
 if args.dataroot:
     dataroot = args.dataroot
 else:
-    # Default path for DGX server: ~/btp/cifar10_hf
+    # Default path for DGX server: ~/btp/Memo
     dataroot = get_default_dataroot()
 
 # Download dataset from Hugging Face if requested or if it doesn't exist
 if args.download or not os.path.exists(dataroot):
-    print(f"Downloading CIFAR-10 from Hugging Face to ~/btp...")
+    print(f"Downloading CIFAR-10 from Hugging Face to ~/btp/Memo...")
     dataroot = download_cifar10_from_hf(os.path.expanduser("~/btp"))
 
 print(f"Using dataroot: {dataroot}")
