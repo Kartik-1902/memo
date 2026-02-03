@@ -1,16 +1,36 @@
 import argparse
+import os
+import sys
 
 from subprocess import call
+
+# Add utils to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils.download_dataset import download_cifar10_from_hf, get_default_dataroot
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--experiment', default='cifar10')
 parser.add_argument('--resume', default='rn26_gn')
+parser.add_argument('--dataroot', default=None, help='Path to dataset root. If not provided, will download to ~/btp')
+parser.add_argument('--download', action='store_true', help='Download CIFAR-10 from Hugging Face')
 args = parser.parse_args()
 experiment = args.experiment
 resume = args.resume
 
-dataroot = '/path/to/cifar10/datasets/'  # EDIT THIS
+# Set dataroot - either use provided path or download to ~/btp
+if args.dataroot:
+    dataroot = args.dataroot
+else:
+    # Default path for DGX server: ~/btp/cifar10_hf
+    dataroot = get_default_dataroot()
+
+# Download dataset from Hugging Face if requested or if it doesn't exist
+if args.download or not os.path.exists(dataroot):
+    print(f"Downloading CIFAR-10 from Hugging Face to ~/btp...")
+    dataroot = download_cifar10_from_hf(os.path.expanduser("~/btp"))
+
+print(f"Using dataroot: {dataroot}")
 
 if experiment == 'cifar10':
     corruptions = ['original']
