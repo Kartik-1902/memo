@@ -1,5 +1,7 @@
 from __future__ import print_function
 import argparse
+import os
+import sys
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -7,6 +9,11 @@ cudnn.benchmark = True
 
 from utils.test_helpers import test
 from utils.train_helpers import build_model, prepare_test_data
+
+# MEMO-MODIFICATION: prefer local datasets/ over HF package name collision.
+_LOCAL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _LOCAL_ROOT not in sys.path:
+	sys.path.insert(0, _LOCAL_ROOT)
 
 
 parser = argparse.ArgumentParser()
