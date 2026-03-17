@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from utils.train_helpers import tr_transforms, te_transforms, te_transforms_inc, common_corruptions
+from utils.train_helpers import tr_transforms, te_transforms, te_transforms_inc, common_corruptions, get_device
 from utils.third_party import indices_in_1k, imagenet_r_mask
 
 
@@ -19,9 +19,10 @@ def adapt_single(model, image, optimizer, criterion,
     else:
         nn.BatchNorm2d.prior = float(prior_strength) / float(prior_strength + 1)
 
+    device = get_device()
     for iteration in range(niter):
         inputs = [tr_transform(image) for _ in range(batch_size)]
-        inputs = torch.stack(inputs).cuda()
+        inputs = torch.stack(inputs).to(device)
         optimizer.zero_grad()
         outputs = model(inputs)
 
@@ -47,10 +48,11 @@ def test_single(model, image, label, corruption, prior_strength,
         transform = te_transforms_inc if corruption in common_corruptions else te_transforms
     else:
         transform = te_transform
-    inputs = transform(image).unsqueeze(0)
+    device = get_device()
+    inputs = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        outputs = model(inputs.cuda())
+        outputs = model(inputs)
 
         if apply_imagenet_masks:
             if corruption == 'rendition':

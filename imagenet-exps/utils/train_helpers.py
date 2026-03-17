@@ -64,33 +64,39 @@ def _build_clip_text_features(clip_model: nn.Module, clip_prompts: List[str]) ->
     return text_features
 
 
+def get_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def build_model(args, class_names: Optional[List[str]] = None, clip_prompts: Optional[List[str]] = None):
     model_name = getattr(args, 'model', None)
     use_pretrained = bool(getattr(args, 'dataset', None)) and not bool(getattr(args, 'resume', None))
+    device = get_device()
 
     if model_name == 'resnet50':
-        net = models.resnet50(pretrained=use_pretrained).cuda()
+        net = models.resnet50(pretrained=use_pretrained).to(device)
     elif model_name == 'vitb16':
         from timm.models import create_model
-        net = create_model('vit_base_patch16_224', pretrained=use_pretrained).cuda()
+        net = create_model('vit_base_patch16_224', pretrained=use_pretrained).to(device)
     elif model_name in ('clip_resnet50', 'clip_vitb16'):
         if not clip_prompts:
             raise ValueError('clip_prompts are required for CLIP zero-shot models.')
         import clip
 
         clip_id = 'RN50' if model_name == 'clip_resnet50' else 'ViT-B/16'
-        clip_model, _ = clip.load(clip_id, device='cuda', jit=False)
+        clip_model, _ = clip.load(clip_id, device=device, jit=False)
         text_features = _build_clip_text_features(clip_model, clip_prompts)
-        net = ClipZeroShot(clip_model, text_features).cuda()
+        net = ClipZeroShot(clip_model, text_features).to(device)
     elif hasattr(args, 'use_rvt') and args.use_rvt:
         print('constructing rvt+ small')
         from timm.models import create_model
-        net = create_model('rvt_small_plus', drop_path_rate=0.1).cuda()
+        net = create_model('rvt_small_plus', drop_path_rate=0.1).to(device)
     elif hasattr(args, 'use_resnext') and args.use_resnext:
-        net = models.resnext101_32x8d().cuda()
+        net = models.resnext101_32x8d().to(device)
     else:
-        net = models.resnet50(pretrained=False).cuda()
-    net = torch.nn.DataParallel(net)
+        net = models.resnet50(pretrained=False).to(device)
+    if device.type == "cuda":
+        net = torch.nn.DataParallel(net)
 
     if hasattr(args, 'prior_strength'):
         if (not args.prior_strength is None and args.prior_strength >= 0):

@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from utils.third_party import AverageMeter, ProgressMeter, imagenet_r_mask, indices_in_1k
+from utils.train_helpers import get_device
 from tqdm import tqdm
 
 
@@ -24,7 +25,8 @@ def test(
     progress = ProgressMeter(len(teloader), batch_time, top1, prefix='Test: ')
     one_hot = []
     losses = []
-    criterion = nn.CrossEntropyLoss(reduction='none').cuda()
+    device = get_device()
+    criterion = nn.CrossEntropyLoss(reduction='none').to(device)
     end = time.time()
 
     iterator = enumerate(teloader)
@@ -33,7 +35,7 @@ def test(
 
     for i, (inputs, labels) in iterator:
         with torch.no_grad():
-            inputs, labels = inputs.cuda(), labels.cuda()
+            inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
 
             if apply_imagenet_masks:
