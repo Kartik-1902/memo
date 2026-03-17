@@ -1,0 +1,27 @@
+# MEMO-MODIFICATION: glibc 2.17 compatible pins (Python 3.8)
+# Torch/Torchvision are installed via conda in environment_setup.sh.
+
+numpy==1.24.4
+pillow==9.5.0
+tqdm==4.66.1
+
+# HuggingFace datasets + transformers
+pyarrow==12.0.1
+datasets==2.14.7
+transformers==4.30.2
+
+# Model libs
+timm==0.6.13
+einops==0.6.1
+
+# CLIP dependencies
+ftfy==6.1.1
+regex==2023.10.3
+
+# Utils
+requests==2.31.0
+scipy==1.10.1
+
+# OpenAI CLIP
+# MEMO-MODIFICATION: install from git to match prompt requirements.
+git+https://github.com/openai/CLIP.git
