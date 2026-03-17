@@ -1,7 +1,5 @@
-import importlib.machinery
-import importlib.util
 import os
-import site
+import sys
 from typing import List, Optional, Tuple
 
 import torch
@@ -11,18 +9,28 @@ from torchvision import transforms
 
 # MEMO-MODIFICATION: ensure we load HF datasets even though this repo has a datasets/ folder.
 def _import_hf_datasets_module():
-    site_paths = []
-    if hasattr(site, "getsitepackages"):
-        site_paths.extend(site.getsitepackages())
-    if hasattr(site, "getusersitepackages"):
-        site_paths.append(site.getusersitepackages())
-    search_paths = [path for path in site_paths if path in os.sys.path]
-    spec = importlib.machinery.PathFinder.find_spec("datasets", search_paths)
-    if spec is None or spec.loader is None:
-        raise ImportError("HuggingFace 'datasets' package not found in site-packages.")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    local_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    removed_paths = []
+    if local_root in sys.path:
+        sys.path.remove(local_root)
+        removed_paths.append(local_root)
+
+    if "datasets" in sys.modules and hasattr(sys.modules["datasets"], "__file__"):
+        if "imagenet-exps" in sys.modules["datasets"].__file__:
+            del sys.modules["datasets"]
+
+    try:
+        import datasets as hf_datasets
+    except Exception as exc:
+        raise ImportError(
+            "Failed to import HuggingFace 'datasets'. Reinstall with "
+            "pip install -U datasets==2.14.7 pyarrow==12.0.1"
+        ) from exc
+    finally:
+        for path in removed_paths:
+            sys.path.insert(0, path)
+
+    return hf_datasets
 
 
 _HF_DATASETS_MODULE = _import_hf_datasets_module()
