@@ -1,5 +1,6 @@
 import copy
 import os
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -39,15 +40,56 @@ def _modified_bn_forward(self, input):
     return nn.functional.batch_norm(input, running_mean, running_var, self.weight, self.bias, False, 0, self.eps)
 
 
-def build_model(args):
-    if hasattr(args, 'use_rvt') and args.use_rvt:
+class ClipZeroShot(nn.Module):
+    # MEMO-MODIFICATION: Wrap CLIP image encoder with per-dataset text features.
+    def __init__(self, clip_model: nn.Module, text_features: torch.Tensor):
+        super().__init__()
+        self.clip_model = clip_model
+        self.register_buffer("text_features", text_features)
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        image_features = self.clip_model.encode_image(images)
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        logit_scale = self.clip_model.logit_scale.exp()
+        return logit_scale * image_features @ self.text_features.t()
+
+
+def _build_clip_text_features(clip_model: nn.Module, clip_prompts: List[str]) -> torch.Tensor:
+    import clip
+
+    tokens = clip.tokenize(clip_prompts).cuda()
+    with torch.no_grad():
+        text_features = clip_model.encode_text(tokens)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+    return text_features
+
+
+def build_model(args, class_names: Optional[List[str]] = None, clip_prompts: Optional[List[str]] = None):
+    model_name = getattr(args, 'model', None)
+    use_pretrained = bool(getattr(args, 'dataset', None)) and not bool(getattr(args, 'resume', None))
+
+    if model_name == 'resnet50':
+        net = models.resnet50(pretrained=use_pretrained).cuda()
+    elif model_name == 'vitb16':
+        from timm.models import create_model
+        net = create_model('vit_base_patch16_224', pretrained=use_pretrained).cuda()
+    elif model_name in ('clip_resnet50', 'clip_vitb16'):
+        if not clip_prompts:
+            raise ValueError('clip_prompts are required for CLIP zero-shot models.')
+        import clip
+
+        clip_id = 'RN50' if model_name == 'clip_resnet50' else 'ViT-B/16'
+        clip_model, _ = clip.load(clip_id, device='cuda', jit=False)
+        text_features = _build_clip_text_features(clip_model, clip_prompts)
+        net = ClipZeroShot(clip_model, text_features).cuda()
+    elif hasattr(args, 'use_rvt') and args.use_rvt:
         print('constructing rvt+ small')
         from timm.models import create_model
         net = create_model('rvt_small_plus', drop_path_rate=0.1).cuda()
     elif hasattr(args, 'use_resnext') and args.use_resnext:
         net = models.resnext101_32x8d().cuda()
     else:
-        net = models.resnet50().cuda()
+        net = models.resnet50(pretrained=False).cuda()
     net = torch.nn.DataParallel(net)
 
     if hasattr(args, 'prior_strength'):
