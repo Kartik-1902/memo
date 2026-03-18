@@ -9,7 +9,35 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-from datasets import load_dataset
+# MEMO-MODIFICATION: ensure we load HF datasets even though this repo has a datasets/ folder.
+def _import_hf_datasets_module():
+    local_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    removed_paths = []
+    if local_root in sys.path:
+        sys.path.remove(local_root)
+        removed_paths.append(local_root)
+
+    if "datasets" in sys.modules and hasattr(sys.modules["datasets"], "__file__"):
+        if "imagenet-exps" in sys.modules["datasets"].__file__:
+            del sys.modules["datasets"]
+
+    try:
+        import datasets as hf_datasets
+    except Exception as exc:
+        raise ImportError(
+            "Failed to import HuggingFace 'datasets'. Reinstall with "
+            "pip install -U datasets==2.14.7 pyarrow==12.0.1"
+        ) from exc
+    finally:
+        for path in removed_paths:
+            sys.path.insert(0, path)
+
+    return hf_datasets
+
+
+_HF_DATASETS_MODULE = _import_hf_datasets_module()
+load_dataset = _HF_DATASETS_MODULE.load_dataset
+ClassLabel = _HF_DATASETS_MODULE.ClassLabel
 
 
 # MEMO-MOD: Registry for the Hugging Face remote-sensing datasets requested by the user.
