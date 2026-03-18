@@ -8,6 +8,7 @@ import torch.backends.cudnn as cudnn
 cudnn.benchmark = True
 
 from utils.test_helpers import test
+from utils.model_helpers import build_model as build_rs_model, canonical_model_name
 from utils.train_helpers import build_model, prepare_test_data
 
 # MEMO-MODIFICATION: prefer local datasets/ over HF package name collision.
@@ -37,7 +38,14 @@ if args.dataset:
 	if args.model is None:
 		args.model = 'resnet50'
 
-	teset, teloader, class_names, tr_transform, te_transform, clip_prompts = load_hf_dataset(
+	# MEMO-MODIFICATION: map legacy model names to the registry used by model_helpers.
+	model_name = canonical_model_name(args.model)
+	if model_name == 'vitb16':
+		model_name = 'vit_b16'
+	elif model_name == 'clip_vitb16':
+		model_name = 'clip_vit_b16'
+
+	teset, teloader, class_names, tr_transform, te_transform, _ = load_hf_dataset(
 		args.dataset,
 		split=None,
 		model_name=args.model,
@@ -45,11 +53,12 @@ if args.dataset:
 		batch_size=args.batch_size,
 		workers=args.workers,
 	)
-	net = build_model(args, class_names=class_names, clip_prompts=clip_prompts)
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	net, _ = build_rs_model(model_name, class_names, device)
 
 	if args.resume and not args.model.startswith('clip'):
 		print(f'Resuming from {args.resume}...')
-		ckpt = torch.load(f'{args.resume}/ckpt.pth')
+		ckpt = torch.load(f'{args.resume}/ckpt.pth', map_location=device)
 		net.load_state_dict(ckpt['state_dict'])
 
 	progress_desc = f"{args.model}-{args.dataset}-initial"

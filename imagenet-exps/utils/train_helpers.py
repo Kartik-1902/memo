@@ -65,7 +65,10 @@ def _build_clip_text_features(clip_model: nn.Module, clip_prompts: List[str]) ->
 
 
 def get_device() -> torch.device:
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # MEMO-MODIFICATION: force GPU-only execution.
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required but not available. Install CUDA-enabled PyTorch or set CUDA_VISIBLE_DEVICES.")
+    return torch.device("cuda")
 
 
 def build_model(args, class_names: Optional[List[str]] = None, clip_prompts: Optional[List[str]] = None):
