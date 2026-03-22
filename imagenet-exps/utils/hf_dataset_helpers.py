@@ -264,12 +264,40 @@ def _resolve_class_metadata(dataset_name: str, dataset_dict) -> Tuple[List[str],
         class_names = [RSICD_FILENAME_ALIASES[token] for token in RSICD_FILENAME_ALIASES]
         label_to_index = {token: index for index, token in enumerate(RSICD_FILENAME_ALIASES)}
 
+        def _normalize_token(token: str) -> str:
+            return re.sub(r'\s+', '', token.strip().lower())
+
         def resolve_label(row: dict) -> int:
-            filename = row['filename']
-            prefix = re.sub(r'_\d+\.jpg$', '', filename.split('/')[-1])
-            if prefix not in label_to_index:
-                raise KeyError(f'Unknown RSICD filename prefix: {prefix}')
-            return label_to_index[prefix]
+            filename = row.get('filename')
+            prefix = None
+            if filename:
+                basename = os.path.basename(filename)
+                stem = re.sub(r'\.[^.]+$', '', basename)
+                prefix = re.sub(r'_\d+$', '', stem).lower()
+                if prefix not in label_to_index:
+                    parent = os.path.basename(os.path.dirname(filename))
+                    if parent:
+                        parent = _normalize_token(parent)
+                        if parent in label_to_index:
+                            return label_to_index[parent]
+
+            for key in ('label', 'class', 'category', 'labels'):
+                if key not in row:
+                    continue
+                value = row[key]
+                if isinstance(value, (int, np.integer)):
+                    return int(value)
+                if isinstance(value, str):
+                    token = _normalize_token(value)
+                    if token in label_to_index:
+                        return label_to_index[token]
+
+            if prefix in label_to_index:
+                return label_to_index[prefix]
+
+            raise KeyError(
+                f"Unknown RSICD filename prefix: {prefix or 'None'}; keys={list(row.keys())}"
+            )
 
         return class_names, resolve_label
 
