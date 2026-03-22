@@ -1,6 +1,7 @@
 import os
+import re
 import sys
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import torch
 from PIL import Image
@@ -72,6 +73,39 @@ _HF_DATASETS = {
     },
 }
 
+RSICD_FILENAME_ALIASES = {
+    "airport": "airport",
+    "bareland": "bare land",
+    "baseballfield": "baseball field",
+    "beach": "beach",
+    "bridge": "bridge",
+    "center": "center",
+    "church": "church",
+    "commercial": "commercial area",
+    "denseresidential": "dense residential",
+    "desert": "desert",
+    "farmland": "farmland",
+    "forest": "forest",
+    "industrial": "industrial area",
+    "meadow": "meadow",
+    "mediumresidential": "medium residential",
+    "mountain": "mountain",
+    "park": "park",
+    "parking": "parking lot",
+    "playground": "playground",
+    "pond": "pond",
+    "port": "port",
+    "railwaystation": "railway station",
+    "resort": "resort",
+    "river": "river",
+    "school": "school",
+    "sparseresidential": "sparse residential",
+    "square": "square",
+    "stadium": "stadium",
+    "storagetanks": "storage tanks",
+    "viaduct": "viaduct",
+}
+
 
 def _resolve_split(dataset_dict, preferred_split: Optional[str]) -> str:
     if preferred_split and preferred_split in dataset_dict:
@@ -112,6 +146,23 @@ def _infer_columns(dataset_name: str, dataset) -> Tuple[str, str]:
             f"Unable to infer image/label columns for dataset '{dataset_name}'."
         )
     return image_key, label_key
+
+
+def _infer_image_column(dataset_name: str, dataset) -> str:
+    config = _HF_DATASETS[dataset_name]
+    column_names = list(dataset.column_names)
+
+    image_key = _pick_column(column_names, config["image_keys"])
+    if image_key is None:
+        for key, feature in dataset.features.items():
+            if getattr(feature, "_type", None) == "Image":
+                image_key = key
+                break
+    if image_key is None:
+        raise ValueError(
+            f"Unable to infer image column for dataset '{dataset_name}'."
+        )
+    return image_key
 
 
 def _get_class_names(dataset, label_key: str) -> List[str]:
@@ -173,11 +224,13 @@ class HFDatasetWrapper(torch.utils.data.Dataset):
         dataset,
         image_key: str,
         label_key: str,
+        label_resolver: Optional[Callable[[dict], int]] = None,
         transform: Optional[transforms.Compose] = None,
     ) -> None:
         self.dataset = dataset
         self.image_key = image_key
         self.label_key = label_key
+        self.label_resolver = label_resolver
         self.transform = transform
 
     def __len__(self) -> int:
@@ -192,8 +245,29 @@ class HFDatasetWrapper(torch.utils.data.Dataset):
             image = image.convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
-        label = row[self.label_key]
+        if self.label_resolver is not None:
+            label = self.label_resolver(row)
+        else:
+            label = row[self.label_key]
         return image, int(label)
+
+
+def _resolve_rsicd_label(row: dict) -> int:
+    filename = None
+    for key in ("filename", "file_name", "file"):
+        if key in row:
+            filename = row[key]
+            break
+    if filename is None:
+        raise KeyError("RSICD sample is missing a filename field.")
+
+    basename = os.path.basename(filename)
+    stem = re.sub(r"\.[^.]+$", "", basename)
+    prefix = re.sub(r"_\d+$", "", stem).lower()
+    label_to_index = {token: index for index, token in enumerate(RSICD_FILENAME_ALIASES)}
+    if prefix not in label_to_index:
+        raise KeyError(f"Unknown RSICD filename prefix: {prefix}")
+    return label_to_index[prefix]
 
 
 def load_hf_dataset(
@@ -212,8 +286,15 @@ def load_hf_dataset(
     split_name = _resolve_split(dataset_dict, split or config["preferred_split"])
     dataset = dataset_dict[split_name]
 
-    image_key, label_key = _infer_columns(dataset_name, dataset)
-    class_names = _get_class_names(dataset, label_key)
+    label_resolver = None
+    if dataset_name == "rsicd":
+        image_key = _infer_image_column(dataset_name, dataset)
+        label_key = "filename"
+        class_names = [RSICD_FILENAME_ALIASES[token] for token in RSICD_FILENAME_ALIASES]
+        label_resolver = _resolve_rsicd_label
+    else:
+        image_key, label_key = _infer_columns(dataset_name, dataset)
+        class_names = _get_class_names(dataset, label_key)
 
     if model_name in ("clip_resnet50", "clip_vitb16"):
         tr_transform, te_transform = _build_clip_transforms()
@@ -221,7 +302,13 @@ def load_hf_dataset(
         tr_transform, te_transform = _build_resnet_vit_transforms()
 
     dataset_transform = te_transform if use_transforms else None
-    teset = HFDatasetWrapper(dataset, image_key, label_key, transform=dataset_transform)
+    teset = HFDatasetWrapper(
+        dataset,
+        image_key,
+        label_key,
+        label_resolver=label_resolver,
+        transform=dataset_transform,
+    )
 
     teloader = None
     if use_transforms:
